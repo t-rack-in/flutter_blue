@@ -316,7 +316,7 @@ public class MyService extends Service {
 	                    new ArrayList<BluetoothGattCharacteristic>();
 	            
 	         // Loops through available Characteristics.
-	            //?????????????????????ÿ????????
+
 	            for (final BluetoothGattCharacteristic gattCharacteristic : gattCharacteristics) {
 	                charas.add(gattCharacteristic);
 	                HashMap<String, String> currentCharaData = new HashMap<String, String>();

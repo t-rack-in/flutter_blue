@@ -30,6 +30,7 @@ import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.ParcelUuid;
+import android.os.SystemClock;
 import android.util.Log;
 
 import com.google.protobuf.ByteString;
@@ -90,8 +91,12 @@ public class FlutterBluePlugin implements FlutterPlugin, ActivityAware, MethodCa
     private boolean allowDuplicates = false;
 
     // Custom
-    public static BluetoothGattCharacteristic target_chara = null;
     public static String RecvString = "";
+    public static byte[] RecvBuff = new byte[5000];
+    public static int RecvLength = 0;
+    public static byte ComAddr;
+    public static boolean CmdIng = false;
+    private static long time1 = 0;
 
     /** Plugin registration. */
     public static void registerWith(Registrar registrar) {
@@ -1152,7 +1157,7 @@ public class FlutterBluePlugin implements FlutterPlugin, ActivityAware, MethodCa
         return -1;
     }
 
-    public static int Inventory_G2(byte QValue,byte Session, byte AdrTID, byte LenTID, byte TIDFlag,int[] CardNum,byte[] EPCList,int[] EPCLength)
+    public static int Inventory_G2(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, byte QValue,byte Session, byte AdrTID, byte LenTID, byte TIDFlag,int[] CardNum,byte[] EPCList,int[] EPCLength)
     {
         byte[] Msg = new byte[10];
         Msg[1] = (byte)(ComAddr & 255);
@@ -1170,11 +1175,11 @@ public class FlutterBluePlugin implements FlutterPlugin, ActivityAware, MethodCa
             getCRC(Msg,7);
         }
 
-        target_chara.setValue(Msg);
+        characteristic.setValue(Msg);
         ArrayClear(RecvBuff,300);
         RecvLength=0;
         RecvString="";
-        gattServer.writeCharacteristic(target_chara)
+        gatt.writeCharacteristic(characteristic);
 
         if (GetInventoryData() == 0) {
 
