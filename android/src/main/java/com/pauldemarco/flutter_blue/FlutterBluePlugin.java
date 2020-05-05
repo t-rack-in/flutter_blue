@@ -89,6 +89,10 @@ public class FlutterBluePlugin implements FlutterPlugin, ActivityAware, MethodCa
     private ArrayList<String> macDeviceScanned = new ArrayList<>();
     private boolean allowDuplicates = false;
 
+    // Custom
+    public static BluetoothGattCharacteristic target_chara = null;
+    public static String RecvString = "";
+
     /** Plugin registration. */
     public static void registerWith(Registrar registrar) {
         if (instance == null) {
@@ -1018,4 +1022,195 @@ public class FlutterBluePlugin implements FlutterPlugin, ActivityAware, MethodCa
         }
     }
 
+    /*
+        Custom
+        UHF Reader
+    */
+    public static void getCRC(byte[] data,int Len)
+    {
+        int i, j;
+        int current_crc_value = 0xFFFF;
+        for (i = 0; i <Len ; i++)
+        {
+            current_crc_value = current_crc_value ^ (data[i] & 0xFF);
+            for (j = 0; j < 8; j++)
+            {
+                if ((current_crc_value & 0x01) != 0)
+                    current_crc_value = (current_crc_value >> 1) ^ 0x8408;
+                else
+                    current_crc_value = (current_crc_value >> 1);
+            }
+        }
+        data[i++] = (byte) (current_crc_value & 0xFF);
+        data[i] = (byte) ((current_crc_value >> 8) & 0xFF);
+    }
+
+    public static boolean checkCRC(byte[] data,int len)
+    {
+        byte[]daw =new byte[256];
+        memcpy(data,0,daw,0,len);
+        getCRC(daw,len);
+        if(0==daw[len+1] && 0==daw[len])
+        {
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    public static void ArrayClear(byte[] Msg,int Size)
+    {
+        for(int i=0;i<Size;i++){
+            Msg[i]=0;
+        }
+    }
+
+    public static void memcpy(byte[] SourceByte,int StartBit_1,byte[] Targetbyte,int StartBit_2,int Length )
+    {
+        for(int m=0;m<Length;m++){
+            Targetbyte[StartBit_2+m]=SourceByte[StartBit_1+m];
+        }
+    }
+
+    public static String bytesToHexString(byte[] src, int offset, int length) {
+        String stmp="";
+        StringBuilder sb = new StringBuilder("");
+        for (int n=0;n<length;n++)
+        {
+            stmp = Integer.toHexString(src[n+offset] & 0xFF);
+            sb.append((stmp.length()==1)? "0"+stmp : stmp);
+        }
+        return sb.toString().toUpperCase().trim();
+    }
+
+    public static byte[] hexStringToBytes(String hexString) {
+        if (hexString == null || hexString.equals("")) {
+            return null;
+        }
+        hexString = hexString.toUpperCase();
+        int length = hexString.length() / 2;
+        char[] hexChars = hexString.toCharArray();
+        byte[] d = new byte[length];
+        for (int i = 0; i < length; i++) {
+            int pos = i * 2;
+            d[i] = (byte) (charToByte(hexChars[pos]) << 4 | charToByte(hexChars[pos + 1]));
+        }
+        return d;
+    }
+
+    private static byte charToByte(char c) {
+        return (byte) "0123456789ABCDEF".indexOf(c);
+    }
+
+    public static int GetInventoryData()
+    {
+        time1 = System.currentTimeMillis();
+
+        while ((System.currentTimeMillis() - time1) < 3000) {
+
+            SystemClock.sleep(10);
+
+            int recvLen = RecvString.length() / 2;
+
+            if (recvLen > 0) {
+                byte[] buffer = new byte[recvLen];
+                buffer = hexStringToBytes(RecvString);
+
+                memcpy(buffer,0, RecvBuff,0, recvLen);
+                RecvLength = recvLen;
+                byte[] Buff1 = new byte[5000];
+
+                memcpy(RecvBuff,0, Buff1,0, recvLen);
+                int nTurn = recvLen;
+
+                while(nTurn > 0) {
+
+                    byte[] Buff2 = new byte[5000];
+
+                    if (nTurn < (Buff1[0] & 255) + 1) {
+                        break;
+                    }
+
+                    if (((Buff1[3] != 0x03) && (Buff1[3] != 0x04)) && ((Buff1[0] & 255) + 1 == nTurn)) {
+                        CmdIng = false;
+                        return 0;
+                    }
+
+                    nTurn = nTurn - (Buff1[0] & 255) - 1;
+                    memcpy(Buff1,(Buff1[0]&255)+1,Buff2,0,nTurn);
+                    ArrayClear(Buff1,5000);
+                    memcpy(Buff2,0,Buff1,0,nTurn);
+
+                }
+            }
+        }
+
+        CmdIng = false;
+
+        return -1;
+    }
+
+    public static int Inventory_G2(byte QValue,byte Session, byte AdrTID, byte LenTID, byte TIDFlag,int[] CardNum,byte[] EPCList,int[] EPCLength)
+    {
+        byte[] Msg = new byte[10];
+        Msg[1] = (byte)(ComAddr & 255);
+        Msg[2] = 1;
+        Msg[3] = QValue;
+        Msg[4] = Session;
+
+        if (TIDFlag==0) {
+            Msg[0]=6;
+            getCRC(Msg,5);
+        } else {
+            Msg[0] = 8;
+            Msg[5] = AdrTID;
+            Msg[6] = LenTID;
+            getCRC(Msg,7);
+        }
+
+        target_chara.setValue(Msg);
+        ArrayClear(RecvBuff,300);
+        RecvLength=0;
+        RecvString="";
+        gattServer.writeCharacteristic(target_chara)
+
+        if (GetInventoryData() == 0) {
+
+            byte[] szBuff = new byte[3000];
+            byte[] szBuff1 = new byte[3000];
+
+            memcpy(RecvBuff,0,szBuff,0,RecvLength);
+
+            int Nlen = 0;
+
+            while (RecvLength > 0) {
+
+                int nLenszBuff = (szBuff[0] & 255) + 1;
+
+                if ((szBuff[3] == 0x01) || (szBuff[3] == 0x02) || (szBuff[3] == 0x03) || (szBuff[3] == 0x04)) {
+                    CardNum[0] += (szBuff[5] & 255);
+                    memcpy(szBuff,6, szBuff1, Nlen,(szBuff[0] & 255) - 7);
+                    Nlen += ((szBuff[0] & 255) - 7);
+
+                    if ((RecvLength - (szBuff[0] & 255) - 1) > 0) {
+                        byte[] daw = new byte[3000];
+                        memcpy(szBuff,(szBuff[0] & 255) + 1, daw,0,RecvLength - (szBuff[0] * 255) - 1);
+                        ArrayClear(szBuff,3000);
+                        memcpy(daw,0, szBuff,0,RecvLength - (szBuff[0] * 255) - 1);
+                    }
+                }
+
+                RecvLength = RecvLength - nLenszBuff;
+            }
+
+            memcpy(szBuff1,0, EPCList,0, Nlen);
+            EPCLength[0] = Nlen;
+
+            return szBuff[3];
+        }
+
+        return 0x30;
+    }
 }
